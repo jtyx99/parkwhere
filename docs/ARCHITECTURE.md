@@ -120,7 +120,8 @@ session caps, and returns lines that sum to the total. Rules encoded:
 - free on Sundays and public holidays where the dataset's `free_parking` says so
 - `short_term_parking` = NO gives no total; restricted hours produce a warning
 
-LTA car parks return rate text only (`ltaSource.quote`), never a total.
+LTA car parks return rate text only (`ltaSource.quote`), never a total. This is not the intended
+end state: calculating an estimated total from that text is planned (ROADMAP.md, Next, item 2).
 
 ### Time
 
