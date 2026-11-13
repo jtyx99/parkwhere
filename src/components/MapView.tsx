@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { fullness } from '../lib/availability';
 import type { Place } from '../lib/onemap';
 import { formatDistance, formatDuration, formatMoney, walkMinutes } from '../lib/time';
-import { lotsLabel, type CarparkItem } from '../model';
+import { lotsLabel, statusText, type CarparkItem } from '../model';
 
 interface Props {
   place: Place | null;
@@ -12,6 +12,7 @@ interface Props {
   selectedId: string | null;
   pending: boolean;
   stayMinutes: number | null;
+  now: number;
   onSelect(id: string): void;
   onDetails(id: string): void;
 }
@@ -44,10 +45,10 @@ function pinIcon(item: CarparkItem, selected: boolean, pending: boolean): L.DivI
   });
 }
 
-function popupHtml(item: CarparkItem, pending: boolean, stayMinutes: number | null): string {
+function popupHtml(item: CarparkItem, pending: boolean, stayMinutes: number | null, now: number): string {
   const { carpark, availability: a, quote, distance } = item;
   const { value, caption } = lotsLabel(a, pending);
-  const status = a.status === 'live' ? 'Live' : 'Predicted';
+  const status = statusText(a, pending, now);
   const charge =
     quote.total !== null && stayMinutes
       ? `<b>${formatMoney(quote.total)}</b> for ${formatDuration(stayMinutes)}`
@@ -65,7 +66,7 @@ function popupHtml(item: CarparkItem, pending: boolean, stayMinutes: number | nu
     </div>`;
 }
 
-export function MapView({ place, radius, items, selectedId, pending, stayMinutes, onSelect, onDetails }: Props) {
+export function MapView({ place, radius, items, selectedId, pending, stayMinutes, now, onSelect, onDetails }: Props) {
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
   const overlay = useRef<L.LayerGroup | null>(null);
@@ -140,7 +141,7 @@ export function MapView({ place, radius, items, selectedId, pending, stayMinutes
       seen.add(id);
       const selected = id === selectedId;
       const icon = pinIcon(item, selected, pending);
-      const html = popupHtml(item, pending, stayMinutes);
+      const html = popupHtml(item, pending, stayMinutes, now);
       let marker = markers.current.get(id);
       if (!marker) {
         marker = L.marker([item.carpark.lat, item.carpark.lng], { icon, title: item.carpark.name })
@@ -160,7 +161,7 @@ export function MapView({ place, radius, items, selectedId, pending, stayMinutes
         markers.current.delete(id);
       }
     }
-  }, [items, selectedId, pending, stayMinutes]);
+  }, [items, selectedId, pending, stayMinutes, now]);
 
   useEffect(() => {
     const m = map.current;

@@ -216,6 +216,7 @@ export function App() {
 
   const widerRadius = nearby.nearest && RADIUS_OPTIONS.find((r) => r >= nearby.nearest!.distance);
   const predicting = !liveMode;
+  const hasLta = useMemo(() => carparks.some((c) => c.sourceId === 'lta'), [carparks]);
 
   return (
     <div className="app">
@@ -288,6 +289,7 @@ export function App() {
           selectedId={selectedId}
           pending={pending}
           stayMinutes={stayMinutes}
+          now={now}
           onSelect={selectFromMap}
           onDetails={showDetails}
         />
@@ -338,7 +340,10 @@ export function App() {
                 Widen search to {formatDistance(widerRadius)}
               </button>
             ) : (
-              <p>Nothing within 1 km either. Only public (HDB) car parks are covered so far.</p>
+              <p>
+                Nothing within 1 km either.
+                {hasLta ? '' : ' Only public (HDB) car parks are covered so far.'}
+              </p>
             )}
           </div>
         ) : (
@@ -374,6 +379,7 @@ export function App() {
                   pending={pending}
                   stayMinutes={stayMinutes}
                   arrival={arrival}
+                  now={now}
                   onToggle={() => setSelectedId((cur) => (cur === item.carpark.id ? null : item.carpark.id))}
                 />
               ))}
@@ -382,7 +388,7 @@ export function App() {
         )}
 
         <footer className="foot">
-          Availability from data.gov.sg (HDB){sources.length > 1 ? ' and LTA DataMall' : ''}. Place search and
+          Availability from data.gov.sg (HDB){hasLta ? ' and LTA DataMall' : ''}. Place search and
           map by OneMap. Charges are estimates; signs at the car park prevail.
           {listDate ? ` Car park list updated ${formatDate(listDate)}.` : ''}
         </footer>

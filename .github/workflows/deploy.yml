@@ -48,6 +48,9 @@ jobs:
 
       - run: npm test
       - run: npm run build
+        env:
+          # Mall / URA snapshots published by lta-snapshot.yml (absent until the key is set).
+          VITE_LTA_DATA_URL: https://raw.githubusercontent.com/${{ github.repository }}/data
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

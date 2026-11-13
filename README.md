@@ -58,15 +58,37 @@ Every push to the default branch also runs the tests and redeploys the site.
 
 ## Adding malls and URA car parks (optional)
 
-LTA DataMall covers major malls and URA/LTA car parks but needs a free account key
-(<https://datamall.lta.gov.sg>) and cannot be called from a browser, so a small proxy is included.
+LTA DataMall covers major malls and URA/LTA car parks. It needs a free account key
+(<https://datamall.lta.gov.sg>) and cannot be called from a browser. Two ways to use it:
+
+### GitHub only (what the hosted site uses)
+
+1. Repo → Settings → Secrets and variables → Actions → **New repository secret**, named
+   `LTA_ACCOUNT_KEY`, with the key as its value. Never commit the key.
+2. That is all. `.github/workflows/lta-snapshot.yml` runs every 5 minutes, fetches the feed with
+   the key and publishes `lta-live.json` plus history files to the `data` branch. The site reads
+   them from there, so mall car parks appear on the next page load.
+
+Things to know:
+
+- Counts are snapshots, typically 10-30 minutes old (GitHub delays scheduled jobs). The app labels
+  them with their age and stops calling them live after 30 minutes.
+- The repo must be public: a job this frequent would exhaust the free Actions minutes of a
+  private repo, and the site reads the snapshots from the public raw-file address.
+- GitHub pauses scheduled workflows after 60 days without repository activity; it emails first,
+  and re-enabling is one click in the Actions tab.
+- Predictions for these car parks appear once about a week of snapshots has built up.
+
+### Live proxy (counts under a minute old)
 
 ```bash
 LTA_ACCOUNT_KEY=your-key npm run server      # http://localhost:8787
 VITE_API_BASE=http://localhost:8787 npm run dev
 ```
 
-The proxy samples the feed every 5 minutes to build its own history, so predictions for these car
-parks appear once it has been running for a week or more. DataMall gives no total lot counts, and
-operator rates are published as free text, so these car parks show the rate text without a
-calculated total.
+Host `server/index.mjs` on any always-on Node host and set `VITE_API_BASE` at build time.
+
+### Limits either way
+
+DataMall gives no total lot counts, and operator rates are published as free text, so these car
+parks show lots left and the rate text without a calculated total.

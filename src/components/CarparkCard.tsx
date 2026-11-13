@@ -8,7 +8,7 @@ import {
   walkMinutes,
   weekdayName,
 } from '../lib/time';
-import { LOT_TYPE_LABEL, lotsLabel, type CarparkItem } from '../model';
+import { LOT_TYPE_LABEL, lotsLabel, statusText, type CarparkItem } from '../model';
 
 interface Props {
   item: CarparkItem;
@@ -16,16 +16,15 @@ interface Props {
   pending: boolean;
   stayMinutes: number | null;
   arrival: number;
+  now: number;
   onToggle(): void;
 }
 
-const STATUS_LABEL = { live: 'Live', predicted: 'Predicted', none: 'No data' } as const;
-
-export function CarparkCard({ item, selected, pending, stayMinutes, arrival, onToggle }: Props) {
+export function CarparkCard({ item, selected, pending, stayMinutes, arrival, now, onToggle }: Props) {
   const { carpark: cp, availability: a, quote, distance } = item;
   const lots = lotsLabel(a, pending);
   const level = fullness(a);
-  const statusLabel = a.status === 'none' && pending ? 'Checking' : STATUS_LABEL[a.status];
+  const statusLabel = statusText(a, pending, now);
 
   return (
     <li className={`card${selected ? ' is-selected' : ''}`} id={`card-${cp.id}`}>

@@ -1,12 +1,20 @@
 // LTA DataMall source (malls, URA and LTA car parks). DataMall needs an account
-// key and does not allow browser calls, so this talks to the proxy in /server.
-// It is enabled only when VITE_API_BASE is set at build time.
-import { sgtShift } from '../lib/time';
+// key and does not allow browser calls, so the app reads it one of two ways:
+//   VITE_LTA_DATA_URL  static snapshots published by a scheduled job (10-30 min old)
+//   VITE_API_BASE      the live proxy in /server
+import { MINUTE, sgtShift } from '../lib/time';
 import type { Carpark, CarparkReading, CarparkSource, Snapshot } from './types';
 
-export const LTA_API_BASE: string | undefined = import.meta.env.VITE_API_BASE || undefined;
+const trim = (s: string | undefined) => s?.replace(/\/+$/, '') || undefined;
+const API_BASE = trim(import.meta.env.VITE_API_BASE);
+const DATA_URL = trim(import.meta.env.VITE_LTA_DATA_URL);
+export const ltaEnabled = !!(API_BASE || DATA_URL);
 
-interface ProxyCarpark {
+/** Slot length of the published history files (must match scripts/snapshot-lta.mjs). */
+export const STATIC_SLOT_MINUTES = 30;
+const PROXY_SLOT_MINUTES = 15;
+
+interface LtaCarpark {
   code: string;
   name: string;
   area: string;
@@ -16,28 +24,82 @@ interface ProxyCarpark {
   lots: { lotType: string; available: number }[];
   rateText?: string[];
 }
-interface ProxyLive {
+export interface LtaLive {
   timestamp: number;
-  carparks: ProxyCarpark[];
+  carparks: LtaCarpark[];
 }
-interface ProxyHistory {
-  /** code -> lot type -> mean lots available in this weekday/time bucket */
-  means: Record<string, Record<string, number>>;
+/** code -> lot type -> [sum of lots available, number of samples] */
+export type LtaHistoryTotals = Record<string, Record<string, [number, number]>>;
+
+export function slotOf(at: Date | number, slotMinutes: number): { dow: number; slot: number } {
+  const s = sgtShift(at);
+  return {
+    dow: s.getUTCDay(),
+    slot: Math.floor((s.getUTCHours() * 60 + s.getUTCMinutes()) / slotMinutes),
+  };
 }
 
-let livePromise: Promise<ProxyLive> | null = null;
-let liveAt = 0;
-
-async function getProxyLive(): Promise<ProxyLive> {
-  if (!livePromise || Date.now() - liveAt > 30_000) {
-    liveAt = Date.now();
-    livePromise = fetch(`${LTA_API_BASE}/api/lta/carparks`).then((r) => {
-      if (!r.ok) throw new Error(`LTA proxy responded ${r.status}`);
-      return r.json();
+export function liveToSnapshot(live: LtaLive): Snapshot {
+  const byCode = new Map<string, CarparkReading>();
+  for (const c of live.carparks) {
+    byCode.set(c.code, {
+      updated: live.timestamp,
+      lots: c.lots.map((l) => ({ ...l, total: null })),
     });
-    livePromise.catch(() => (livePromise = null));
   }
-  return livePromise;
+  return { timestamp: live.timestamp, byCode };
+}
+
+/** Turn mean lots per car park into a snapshot dated `at`. */
+export function meansToSnapshot(means: Record<string, Record<string, number>>, at: number): Snapshot {
+  const byCode = new Map<string, CarparkReading>();
+  for (const [code, types] of Object.entries(means)) {
+    byCode.set(code, {
+      updated: at,
+      lots: Object.entries(types).map(([lotType, mean]) => ({
+        lotType,
+        available: Math.round(mean),
+        total: null,
+      })),
+    });
+  }
+  return { timestamp: at, byCode };
+}
+
+export function totalsToMeans(totals: LtaHistoryTotals): Record<string, Record<string, number>> {
+  const means: Record<string, Record<string, number>> = {};
+  for (const [code, types] of Object.entries(totals)) {
+    means[code] = {};
+    for (const [type, [sum, n]] of Object.entries(types)) if (n > 0) means[code][type] = sum / n;
+  }
+  return means;
+}
+
+const EMPTY: LtaLive = { timestamp: 0, carparks: [] };
+let cached: { at: number; ttl: number; value: Promise<LtaLive> } | null = null;
+
+/** Latest data, or an empty set when none has been published yet. */
+function getLiveData(): Promise<LtaLive> {
+  if (cached && Date.now() - cached.at < cached.ttl) return cached.value;
+  const url = API_BASE ? `${API_BASE}/api/lta/carparks` : `${DATA_URL}/lta-live.json`;
+  const entry = {
+    at: Date.now(),
+    ttl: 45_000,
+    value: fetch(url).then(
+      (r) => {
+        if (r.ok) return r.json() as Promise<LtaLive>;
+        // No snapshot yet (key not configured): look again in a while.
+        entry.ttl = 10 * MINUTE;
+        return EMPTY;
+      },
+      () => {
+        entry.ttl = 2 * MINUTE;
+        return EMPTY;
+      },
+    ),
+  };
+  cached = entry;
+  return entry.value;
 }
 
 export const ltaSource: CarparkSource = {
@@ -45,7 +107,7 @@ export const ltaSource: CarparkSource = {
   label: 'LTA DataMall',
 
   async loadCarparks() {
-    const live = await getProxyLive();
+    const live = await getLiveData();
     return live.carparks.map(
       (c): Carpark => ({
         id: `lta:${c.code}`,
@@ -62,37 +124,28 @@ export const ltaSource: CarparkSource = {
   },
 
   async getLive() {
-    const live = await getProxyLive();
-    const byCode = new Map<string, CarparkReading>();
-    for (const c of live.carparks) {
-      byCode.set(c.code, {
-        updated: live.timestamp,
-        lots: c.lots.map((l) => ({ ...l, total: null })),
-      });
-    }
-    return { timestamp: live.timestamp, byCode };
+    return liveToSnapshot(await getLiveData());
   },
 
   async getHistory(at) {
-    const s = sgtShift(at);
-    const bucket = Math.floor((s.getUTCHours() * 60 + s.getUTCMinutes()) / 15);
-    const res = await fetch(`${LTA_API_BASE}/api/lta/history?dow=${s.getUTCDay()}&bucket=${bucket}`);
-    if (!res.ok) return [];
-    const { means } = (await res.json()) as ProxyHistory;
-    const timestamp = +at;
-    const byCode = new Map<string, CarparkReading>();
-    for (const [code, types] of Object.entries(means)) {
-      byCode.set(code, {
-        updated: timestamp,
-        lots: Object.entries(types).map(([lotType, mean]) => ({
-          lotType,
-          available: Math.round(mean),
-          total: null,
-        })),
-      });
+    try {
+      let means: Record<string, Record<string, number>>;
+      if (API_BASE) {
+        const { dow, slot } = slotOf(at, PROXY_SLOT_MINUTES);
+        const res = await fetch(`${API_BASE}/api/lta/history?dow=${dow}&bucket=${slot}`);
+        if (!res.ok) return [];
+        means = ((await res.json()) as { means: typeof means }).means;
+      } else {
+        const { dow, slot } = slotOf(at, STATIC_SLOT_MINUTES);
+        const res = await fetch(`${DATA_URL}/history/${dow}-${slot}.json`);
+        if (!res.ok) return [];
+        means = totalsToMeans((await res.json()) as LtaHistoryTotals);
+      }
+      const snap = meansToSnapshot(means, +at);
+      return snap.byCode.size ? [snap] : [];
+    } catch {
+      return [];
     }
-    const snap: Snapshot = { timestamp, byCode };
-    return byCode.size ? [snap] : [];
   },
 
   quote(cp) {

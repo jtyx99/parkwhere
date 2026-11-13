@@ -1,0 +1,64 @@
+name: LTA car park snapshot
+
+# Publishes mall / URA / LTA car park availability to the `data` branch, which
+# the app reads. Does nothing until the LTA_ACCOUNT_KEY repository secret is set.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lta-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LTA_ACCOUNT_KEY: ${{ secrets.LTA_ACCOUNT_KEY }}
+    steps:
+      - name: Check for key
+        id: key
+        run: |
+          if [ -n "$LTA_ACCOUNT_KEY" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "LTA_ACCOUNT_KEY secret is not set; nothing to do."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.present == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          node-version: 22
+
+      - name: Restore previous snapshot
+        if: steps.key.outputs.present == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/data"
+          if git fetch --depth=1 origin data 2>/dev/null; then
+            git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/data"
+          fi
+
+      - name: Take snapshot
+        if: steps.key.outputs.present == 'true'
+        run: node scripts/snapshot-lta.mjs "$RUNNER_TEMP/data"
+
+      - name: Publish to data branch
+        if: steps.key.outputs.present == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/data"
+          git init -q -b data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "LTA car park snapshot"
+          # One commit only, replaced each run, so the repository stays small.
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" data
