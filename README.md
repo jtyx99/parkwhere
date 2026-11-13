@@ -3,7 +3,12 @@
 Find parking near a destination in Singapore: live lots, predicted availability for later
 arrivals, charges for your stay and walking distance, on a map.
 
-## Run it
+## Use it
+
+Live at <https://jtyx99.github.io/parkwhere/> once GitHub Pages is switched on for the repo
+(Settings → Pages → Source: **GitHub Actions**; the repo must be public or on a paid plan).
+
+## Run it locally
 
 ```bash
 npm install
@@ -38,6 +43,18 @@ Open the printed URL, search for a place, set arrival and departure, and pick a 
 - **Search and map**: OneMap. Search currently works without a token; if that changes, set
   `VITE_ONEMAP_TOKEN`.
 - All times are Singapore time.
+
+## Keeping data up to date
+
+| Data | How it stays current |
+|---|---|
+| Lots available | Fetched live, every minute while the app is open |
+| Predictions | Read from the past four weeks on demand, so they roll forward |
+| HDB car park list | Refreshed every Monday by `.github/workflows/deploy.yml`, which commits any change and redeploys. Run the workflow manually from the Actions tab to refresh sooner. |
+| HDB rate rules | Manual: `src/lib/pricing/hdb.ts` (rates, caps, Central Area car parks) |
+| Public holidays | Manual: `src/lib/pricing/holidays.ts`, listed to the end of 2027 |
+
+Every push to the default branch also runs the tests and redeploys the site.
 
 ## Adding malls and URA car parks (optional)
 

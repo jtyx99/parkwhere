@@ -44,6 +44,11 @@ export function formatDayClock(d: Date | number): string {
   return `${DAYS[s.getUTCDay()]} ${s.getUTCDate()} ${MONTHS[s.getUTCMonth()]}, ${formatClock(d)}`;
 }
 
+export function formatDate(d: Date | number): string {
+  const s = sgtShift(d);
+  return `${s.getUTCDate()} ${MONTHS[s.getUTCMonth()]} ${s.getUTCFullYear()}`;
+}
+
 export const weekdayName = (d: Date | number) =>
   ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
     sgtShift(d).getUTCDay()

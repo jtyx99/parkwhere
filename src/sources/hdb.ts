@@ -70,6 +70,10 @@ async function fetchSnapshot(at?: number): Promise<Snapshot | null> {
 const BUCKET = 15 * MINUTE;
 const historyCache = new Map<number, Promise<Snapshot | null>>();
 
+let listDate: number | null = null;
+/** When the bundled car park list was last refreshed (known after loadCarparks). */
+export const hdbListDate = () => listDate;
+
 export const hdbSource: CarparkSource = {
   id: 'hdb',
   label: 'HDB',
@@ -77,7 +81,11 @@ export const hdbSource: CarparkSource = {
   async loadCarparks() {
     const res = await fetch(`${import.meta.env.BASE_URL}data/hdb-carparks.json`);
     if (!res.ok) throw new Error('Could not load the HDB car park list');
-    const { carparks } = (await res.json()) as { carparks: RawCarpark[] };
+    const { carparks, fetchedAt } = (await res.json()) as {
+      carparks: RawCarpark[];
+      fetchedAt?: string;
+    };
+    listDate = fetchedAt ? +new Date(fetchedAt) : null;
     return carparks
       .filter((r) => Number.isFinite(r.x) && Number.isFinite(r.y) && r.x > 0 && r.y > 0)
       .map((r): Carpark => {

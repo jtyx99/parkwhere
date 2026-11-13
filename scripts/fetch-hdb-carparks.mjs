@@ -1,6 +1,6 @@
 // Builds public/data/hdb-carparks.json from data.gov.sg "HDB Carpark Information".
 // Coordinates stay in SVY21 (x, y); the app converts them to WGS84 on load.
-import { writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 const RESOURCE = 'd_23f946fa557947f93a8043bbef41dd09';
 const BASE = 'https://data.gov.sg/api/action/datastore_search';
@@ -31,9 +31,25 @@ const out = rows.map((r) => ({
   basement: r.car_park_basement === 'Y',
 }));
 
-await mkdir('public/data', { recursive: true });
-await writeFile(
-  'public/data/hdb-carparks.json',
-  JSON.stringify({ fetchedAt: new Date().toISOString(), carparks: out }),
-);
-console.log(`Wrote ${out.length} HDB car parks`);
+const FILE = 'public/data/hdb-carparks.json';
+
+// Guard against a partial or empty download replacing a good list.
+if (out.length < 1500) {
+  throw new Error(`Only ${out.length} car parks returned; keeping the existing list`);
+}
+out.sort((a, b) => a.code.localeCompare(b.code));
+
+// Leave the file untouched when nothing changed, so refresh jobs only commit real changes.
+let previous = null;
+try {
+  previous = JSON.parse(await readFile(FILE, 'utf8'));
+} catch {
+  /* no existing file */
+}
+if (previous && JSON.stringify(previous.carparks) === JSON.stringify(out)) {
+  console.log(`No changes (${out.length} HDB car parks, list dated ${previous.fetchedAt})`);
+} else {
+  await mkdir('public/data', { recursive: true });
+  await writeFile(FILE, JSON.stringify({ fetchedAt: new Date().toISOString(), carparks: out }));
+  console.log(`Wrote ${out.length} HDB car parks`);
+}

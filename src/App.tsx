@@ -5,9 +5,10 @@ import { SearchBar } from './components/SearchBar';
 import { isFresh, resolveAvailability, wantsLive } from './lib/availability';
 import { haversine } from './lib/geo';
 import { searchPlaces, type Place } from './lib/onemap';
-import { MINUTE, formatClock, formatDistance, parseSgt, toSgtInput } from './lib/time';
+import { MINUTE, formatClock, formatDate, formatDistance, parseSgt, toSgtInput } from './lib/time';
 import { RADIUS_OPTIONS, type CarparkItem, type SortMode } from './model';
 import { sourceById, sources } from './sources';
+import { hdbListDate } from './sources/hdb';
 import type { Carpark, Snapshot, SourceId } from './sources/types';
 
 const EXAMPLES = ['Tampines Hub', 'Toa Payoh Central', 'Chinatown Complex', 'Bedok Interchange'];
@@ -33,6 +34,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sort, setSort] = useState<SortMode>('distance');
   const [now, setNow] = useState(() => Date.now());
+  const [listDate, setListDate] = useState<number | null>(null);
 
   // Car park lists.
   useEffect(() => {
@@ -41,6 +43,7 @@ export function App() {
       if (cancelled) return;
       const all = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
       setCarparks(all);
+      setListDate(hdbListDate());
       if (all.length === 0) setLoadError('Could not load the car park list. Reload to try again.');
     });
     return () => {
@@ -381,6 +384,7 @@ export function App() {
         <footer className="foot">
           Availability from data.gov.sg (HDB){sources.length > 1 ? ' and LTA DataMall' : ''}. Place search and
           map by OneMap. Charges are estimates; signs at the car park prevail.
+          {listDate ? ` Car park list updated ${formatDate(listDate)}.` : ''}
         </footer>
       </section>
     </div>
