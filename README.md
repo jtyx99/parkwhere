@@ -3,6 +3,8 @@
 Find parking near a destination in Singapore: live lots, predicted availability for later
 arrivals, charges for your stay and walking distance, on a map.
 
+For developers: [how it works](docs/ARCHITECTURE.md) and the [roadmap](docs/ROADMAP.md).
+
 ## Use it
 
 Live at <https://jtyx99.github.io/parkwhere/> once GitHub Pages is switched on for the repo
